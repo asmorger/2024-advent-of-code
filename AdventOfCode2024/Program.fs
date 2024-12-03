@@ -1,40 +1,47 @@
 ﻿// For more information see https://aka.ms/fsharp-console-apps
 
-open System
 open System.IO
+open System.Text.RegularExpressions
 
 let input = File.ReadAllText "./input.txt"
+let sample ="xmul(2,4)%&mul[3,7]!@^do_not_mul(5,5)+mul(32,64]then(mul(11,8)mul(8,5))"
+let regex = Regex(@"mul\([\d]+,[\d]+\)")
 
-let levels = input.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries ||| StringSplitOptions.TrimEntries)
+let testMatches = regex.Count sample
 
-let isWithinSafeParameters (level: int array) =
-    let isIncreasing = level[0] < level[1]
+printfn $"The number of matches is %i{testMatches}"
+
+let parse (expression:string) =
+    let clean = expression.Replace("mul(", "").Replace(")", "")
     
-    let differences = level |> Array.pairwise |> Array.map(fun (x, y) -> if isIncreasing then y - x else x - y)
-    let unsafe = differences |> Array.filter(fun x -> x < 1 || x > 3)
+    clean.Split ','
+    |> Array.map(int)
+    |> Array.fold (*) 1
     
-    unsafe.Length = 0
+let result =
+    regex.Matches(input)
+    |> Seq.map(_.Value)
+    |> Seq.map(parse)
+    |> Seq.sum
+    
+printfn $"The result is %i{result}"
 
-let isSafe (level: string) =
-    let values = level.Split ' ' |> Array.map(int)
-    let isSafe = isWithinSafeParameters values
-    isSafe
-let safeLevels = levels |> Array.filter(isSafe)
+let split (input:string) =
+    seq{
+        let dos = input.Split "do()"
+        
+        for section in dos do
+            let stop = section.IndexOf "don't()"
+            
+            if stop > 0 then section.Substring(0, stop)
+            else section
+    }
 
-printf $"The number of safe levels is %i{safeLevels.Length}"
+let cleanedInput = input |> split |> String.concat ""
+let result2 =
+    regex.Matches(cleanedInput)
+        |> Seq.map(_.Value)
+        |> Seq.map(parse)
+        |> Seq.sum
 
-let applyDapener (level: int array) =
-    seq {
-        for i in [0..(level.Length - 1)] do
-            yield level |> Array.removeAt i
-    } |> Seq.toArray
-
-let isSafeWithDapener(level: string) =
-    let values = level.Split ' ' |> Array.map(int) |> applyDapener
-    let safeValues = values |> Array.filter(isWithinSafeParameters)
-    safeValues.Length > 0
-
-
-let dapenedSafeLevels = levels |> Array.filter(isSafeWithDapener)
-
-printf $"The number of safe levels is %i{safeLevels.Length} and the number with dapening is %i{dapenedSafeLevels.Length}"
+printfn $"The updated result is %i{result2}"
