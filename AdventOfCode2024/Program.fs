@@ -18,11 +18,13 @@ let parse (expression:string) =
     |> Array.map(int)
     |> Array.fold (*) 1
     
-let result =
-    regex.Matches(input)
+let processor value =
+    regex.Matches(value)
     |> Seq.map(_.Value)
     |> Seq.map(parse)
     |> Seq.sum
+
+let result = input |> processor
     
 printfn $"The result is %i{result}"
 
@@ -33,15 +35,11 @@ let split (input:string) =
         for section in dos do
             let stop = section.IndexOf "don't()"
             
-            if stop > 0 then section.Substring(0, stop)
-            else section
+            if stop > 0 then yield section.Substring(0, stop)
+            else yield section
     }
 
 let cleanedInput = input |> split |> String.concat ""
-let result2 =
-    regex.Matches(cleanedInput)
-        |> Seq.map(_.Value)
-        |> Seq.map(parse)
-        |> Seq.sum
+let result2 = cleanedInput |> processor
 
 printfn $"The updated result is %i{result2}"
