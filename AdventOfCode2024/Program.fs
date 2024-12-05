@@ -1,112 +1,82 @@
 ﻿// For more information see https://aka.ms/fsharp-console-apps
 
 open System.IO
-open System.Text.RegularExpressions
+open System.Reflection
 
-let input = File.ReadAllLines "./input.txt"
+let inputs = File.ReadAllLines "./input.txt"
+let separatorIndex = inputs |> Array.findIndex(fun x -> x.Length = 0)
+let sections = inputs |> Array.splitAt separatorIndex
+let page_ordering_rules_source, page_numbers_of_updates_source = sections
 
-let explodeGrid () =
-    let relativeDirections = [-1; 0; 1]
+let page_number_updates =
+    page_numbers_of_updates_source
+    |> Array.filter(fun x -> x.Length > 0)
+    |> Array.map(fun x -> x.Split ',' |> Array.map(int) |> Array.toList)
 
-    relativeDirections
-    |> List.map(fun y -> relativeDirections |> List.map(fun x -> (x, y)))
-    |> List.concat
-    |> List.filter(fun x -> x <> (0,0))
-
-let doesMatchChar
-    (grid: char array array)
-    (x: int)
-    (y: int)
-    (target: char)
-    : bool
-    =
-    if(y < 0 || y >= grid.Length || x < 0 || x >= grid[0].Length) then false
-    else grid[y][x] = target
-
-
-let countWordsInStraightLine
-    (grid: char array array)
-    (xStart: int)
-    (yStart: int)
-    (target: char array)
-    : int
-    =
-    let allRelativePositions =
-        explodeGrid()
-        |> List.map(fun (x,y) ->
-            seq { 0..target.Length - 1 }
-            |> Seq.map(fun v -> (x * v, y * v)))
-
-    allRelativePositions
-    |> List.map(fun allCoordinates ->
-        allCoordinates
-        |> List.ofSeq
-        |> List.mapi(fun i (x, y) -> (i, x, y))
-        |> List.forall(fun (i, x, y) ->
-            doesMatchChar
-                grid
-                (xStart + x)
-                (yStart + y)
-                target[i]
-          )
+let page_ordering_rules =
+    page_ordering_rules_source
+    |> Array.map(fun x ->
+        let values = x.Split '|'
+        (int(values[0]), int(values[1]))
       )
 
-    |> List.filter id
-    |> List.length
+    |> Set
 
-let part1 (input : string array) =
-    let grid = input |> Array.map(_.ToCharArray())
-    let mutable count = 0
+let matches_rule (rule: int * int) (update: int list) : bool =
+    let target, after = rule
+    let targetIndex = update |> List.findIndex(fun x -> x = target)
+    let afterIndex = update |> List.findIndex(fun x -> x = after)
 
-    for y = 0 to grid.Length - 1 do
-        for x = 0 to grid[0].Length - 1 do
-            let foundWords =
-                countWordsInStraightLine
-                    grid
-                    x
-                    y
-                    ("XMAS".ToCharArray())
+    targetIndex < afterIndex
 
-            count <- count + foundWords
-    count
+let is_update_in_correct_order (update: int list) : bool =
+    let all_pairs_in_update = List.allPairs update update |> Set
+    let matchedRules = all_pairs_in_update |> Set.intersect page_ordering_rules
+    let correctRules = matchedRules |> Set.filter(fun rule -> matches_rule rule update)
 
-let result = part1 input
-printfn $"The total number of words is %i{result}"
+    matchedRules.Count = correctRules.Count
 
-let isXMas (grid: char array array) (x: int) (y:int)  : bool =
-    let isCharEqual = doesMatchChar grid
+let part_1 =
+    page_number_updates
+    |> Array.filter(is_update_in_correct_order)
+    |> Array.map(fun arr -> arr[arr.Length / 2])
+    |> Array.sum
 
-    if not (isCharEqual x y 'A') then false
+let result_1 = part_1
+
+printfn $"The number of sum of part 1 is %i{result_1}"
+
+let update_to_match_rule  (update: int list) (rule: int * int) : int list =
+    let before, after = rule
+
+    let beforeIndex = update |> List.findIndex(fun x -> x = before)
+    let afterIndex = update |> List.findIndex(fun x -> x = after)
+
+    let targetIndex = if(afterIndex - 1) < 0 then 0 else afterIndex - 1
+
+    update
+    |> List.removeAt beforeIndex
+    |> List.insertAt targetIndex before
+
+let rec reorder_the_update (update: int list) : int list =
+    let all_pairs_in_update = List.allPairs update update |> Set
+    let matchedRules = all_pairs_in_update |> Set.intersect page_ordering_rules
+    let incorrectRules = matchedRules |> Set.filter(fun rule -> matches_rule rule update |> not)
+
+    if incorrectRules.Count = 0 then update
     else
-        let left =(
-            (isCharEqual (x  - 1) (y - 1) 'M' && isCharEqual (x + 1) (y + 1) 'S')
-            ||
-            (isCharEqual (x  - 1) (y - 1) 'S' && isCharEqual (x + 1) (y + 1) 'M')
-        )
+        let updated = update_to_match_rule update incorrectRules.MinimumElement
+        reorder_the_update updated
 
+let part_2 =
+    let updated =
+        page_number_updates
+        |> Array.filter(fun x -> is_update_in_correct_order x |> not)
+        |> Array.map(fun x -> reorder_the_update x)
 
-        let right =(
-            (isCharEqual (x  + 1) (y - 1) 'M' && isCharEqual (x - 1) (y + 1) 'S')
-            ||
-            (isCharEqual (x  + 1) (y - 1) 'S' && isCharEqual (x - 1) (y + 1) 'M')
-        )
+    updated
+    |> Array.map(fun arr -> arr[arr.Length / 2])
+    |> Array.sum
 
-        left && right
-
-let part2 (input : string array) =
-    let grid = input |> Array.map(_.ToCharArray())
-    let mutable count = 0
-
-    for y = 0 to grid.Length - 1 do
-        for x = 0 to grid[0].Length - 1 do
-            let foundWords =
-                if (isXMas grid x y) then 1
-                else 0
-
-            count <- count + foundWords
-    count
-
-
-let result2 = part2 input
-
-printfn $"The total number of XMAS is %i{result2}"
+let result_2 = part_2
+printfn $"The number of sum of part 2 is %i{result_2}"
