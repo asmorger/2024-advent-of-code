@@ -3,43 +3,110 @@
 open System.IO
 open System.Text.RegularExpressions
 
-let input = File.ReadAllText "./input.txt"
-let sample ="xmul(2,4)%&mul[3,7]!@^do_not_mul(5,5)+mul(32,64]then(mul(11,8)mul(8,5))"
-let regex = Regex(@"mul\([\d]+,[\d]+\)")
+let input = File.ReadAllLines "./input.txt"
 
-let testMatches = regex.Count sample
+let explodeGrid () =
+    let relativeDirections = [-1; 0; 1]
 
-printfn $"The number of matches is %i{testMatches}"
+    relativeDirections
+    |> List.map(fun y -> relativeDirections |> List.map(fun x -> (x, y)))
+    |> List.concat
+    |> List.filter(fun x -> x <> (0,0))
 
-let parse (expression:string) =
-    let clean = expression.Replace("mul(", "").Replace(")", "")
-    
-    clean.Split ','
-    |> Array.map(int)
-    |> Array.fold (*) 1
-    
-let processor value =
-    regex.Matches(value)
-    |> Seq.map(_.Value)
-    |> Seq.map(parse)
-    |> Seq.sum
+let doesMatchChar
+    (grid: char array array)
+    (x: int)
+    (y: int)
+    (target: char)
+    : bool
+    =
+    if(y < 0 || y >= grid.Length || x < 0 || x >= grid[0].Length) then false
+    else grid[y][x] = target
 
-let result = input |> processor
-    
-printfn $"The result is %i{result}"
 
-let split (input:string) =
-    seq{
-        let dos = input.Split "do()"
-        
-        for section in dos do
-            let stop = section.IndexOf "don't()"
-            
-            if stop > 0 then yield section.Substring(0, stop)
-            else yield section
-    }
+let countWordsInStraightLine
+    (grid: char array array)
+    (xStart: int)
+    (yStart: int)
+    (target: char array)
+    : int
+    =
+    let allRelativePositions =
+        explodeGrid()
+        |> List.map(fun (x,y) ->
+            seq { 0..target.Length - 1 }
+            |> Seq.map(fun v -> (x * v, y * v)))
 
-let cleanedInput = input |> split |> String.concat ""
-let result2 = cleanedInput |> processor
+    allRelativePositions
+    |> List.map(fun allCoordinates ->
+        allCoordinates
+        |> List.ofSeq
+        |> List.mapi(fun i (x, y) -> (i, x, y))
+        |> List.forall(fun (i, x, y) ->
+            doesMatchChar
+                grid
+                (xStart + x)
+                (yStart + y)
+                target[i]
+          )
+      )
 
-printfn $"The updated result is %i{result2}"
+    |> List.filter id
+    |> List.length
+
+let part1 (input : string array) =
+    let grid = input |> Array.map(_.ToCharArray())
+    let mutable count = 0
+
+    for y = 0 to grid.Length - 1 do
+        for x = 0 to grid[0].Length - 1 do
+            let foundWords =
+                countWordsInStraightLine
+                    grid
+                    x
+                    y
+                    ("XMAS".ToCharArray())
+
+            count <- count + foundWords
+    count
+
+let result = part1 input
+printfn $"The total number of words is %i{result}"
+
+let isXMas (grid: char array array) (x: int) (y:int)  : bool =
+    let isCharEqual = doesMatchChar grid
+
+    if not (isCharEqual x y 'A') then false
+    else
+        let left =(
+            (isCharEqual (x  - 1) (y - 1) 'M' && isCharEqual (x + 1) (y + 1) 'S')
+            ||
+            (isCharEqual (x  - 1) (y - 1) 'S' && isCharEqual (x + 1) (y + 1) 'M')
+        )
+
+
+        let right =(
+            (isCharEqual (x  + 1) (y - 1) 'M' && isCharEqual (x - 1) (y + 1) 'S')
+            ||
+            (isCharEqual (x  + 1) (y - 1) 'S' && isCharEqual (x - 1) (y + 1) 'M')
+        )
+
+        left && right
+
+let part2 (input : string array) =
+    let grid = input |> Array.map(_.ToCharArray())
+    let mutable count = 0
+
+    for y = 0 to grid.Length - 1 do
+        for x = 0 to grid[0].Length - 1 do
+            let foundWords =
+                if (isXMas grid x y) then 1
+                else 0
+
+            count <- count + foundWords
+    count
+
+
+let result2 = part2 input
+
+printfn $"The total number of XMAS is %i{result2}"
