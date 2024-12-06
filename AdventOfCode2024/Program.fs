@@ -1,82 +1,86 @@
 ﻿// For more information see https://aka.ms/fsharp-console-apps
 
 open System.IO
-open System.Reflection
 
-let inputs = File.ReadAllLines "./input.txt"
-let separatorIndex = inputs |> Array.findIndex(fun x -> x.Length = 0)
-let sections = inputs |> Array.splitAt separatorIndex
-let page_ordering_rules_source, page_numbers_of_updates_source = sections
+let inputs = File.ReadAllLines "./sample.txt"
 
-let page_number_updates =
-    page_numbers_of_updates_source
-    |> Array.filter(fun x -> x.Length > 0)
-    |> Array.map(fun x -> x.Split ',' |> Array.map(int) |> Array.toList)
+type Orientation =
+    | North
+    | South
+    | East
+    | West
+    member this.turn =
+        match this with
+        | North -> East
+        | East -> South
+        | South -> West
+        | West -> North
 
-let page_ordering_rules =
-    page_ordering_rules_source
-    |> Array.map(fun x ->
-        let values = x.Split '|'
-        (int(values[0]), int(values[1]))
-      )
+type Coordinate = Coordinate of (int * int)
+with
+    member this.value = let (Coordinate value) = this in value
 
-    |> Set
+    member this.x =
+        let x, y = this.value
+        x
 
-let matches_rule (rule: int * int) (update: int list) : bool =
-    let target, after = rule
-    let targetIndex = update |> List.findIndex(fun x -> x = target)
-    let afterIndex = update |> List.findIndex(fun x -> x = after)
+    member this.y =
+        let x, y = this.value
+        y
 
-    targetIndex < afterIndex
+    member this.move orientation =
+        let x, y = this.value
 
-let is_update_in_correct_order (update: int list) : bool =
-    let all_pairs_in_update = List.allPairs update update |> Set
-    let matchedRules = all_pairs_in_update |> Set.intersect page_ordering_rules
-    let correctRules = matchedRules |> Set.filter(fun rule -> matches_rule rule update)
+        match orientation with
+        | North -> Coordinate (x, y + 1)
+        | East -> Coordinate (x + 1, y)
+        | South -> Coordinate (x, y - 1)
+        | West -> Coordinate (x - 1, y)
+type Piece =
+    | Hallway of Coordinate
+    | Wall of Coordinate
+    | Guard of Coordinate * Orientation
+    static member parse legend position =
+        match legend with
+        | '.' -> Hallway position
+        | '#' -> Wall position
+        | '^' -> Guard (position , North)
+        | '>' -> Guard (position, East)
+        | 'v' -> Guard (position, South)
+        | '<' -> Guard (position, West)
+        | _ -> failwith "Unknown legend on map"
 
-    matchedRules.Count = correctRules.Count
+type Grid<'T> = Grid of 'T array array
+with
+    static member parse (rows: string array) (parser: char -> Coordinate -> 'T) =
+        seq {
+            for y = 0 to rows.Length - 1 do
+                let values = rows[y].ToCharArray()
+                values |> Array.mapi(fun x character -> parser character, Coordinate(x, y))
+        } |> Seq.toArray
+
+    member this.value = let (Grid value) = this in value
+
+    member this.rows =
+        this.value[0]
+
+    member this.bounds =
+        let min = Coordinate(0, 0)
+        let max = Coordinate((this.value.Length - 1), (this.value[0].Length - 1))
+
+        (min, max)
+
+    member this.at (position: Coordinate) =
+        this.value[position.y].[position.x]
+
+    member this.find_first (lookup: 'T -> bool) =
+        seq {
+            for row in this.rows do
+                for column in row do
+                    if(lookup column) then yield column
+        } |> Seq.head
+
 
 let part_1 =
-    page_number_updates
-    |> Array.filter(is_update_in_correct_order)
-    |> Array.map(fun arr -> arr[arr.Length / 2])
-    |> Array.sum
-
-let result_1 = part_1
-
-printfn $"The number of sum of part 1 is %i{result_1}"
-
-let update_to_match_rule  (update: int list) (rule: int * int) : int list =
-    let before, after = rule
-
-    let beforeIndex = update |> List.findIndex(fun x -> x = before)
-    let afterIndex = update |> List.findIndex(fun x -> x = after)
-
-    let targetIndex = if(afterIndex - 1) < 0 then 0 else afterIndex - 1
-
-    update
-    |> List.removeAt beforeIndex
-    |> List.insertAt targetIndex before
-
-let rec reorder_the_update (update: int list) : int list =
-    let all_pairs_in_update = List.allPairs update update |> Set
-    let matchedRules = all_pairs_in_update |> Set.intersect page_ordering_rules
-    let incorrectRules = matchedRules |> Set.filter(fun rule -> matches_rule rule update |> not)
-
-    if incorrectRules.Count = 0 then update
-    else
-        let updated = update_to_match_rule update incorrectRules.MinimumElement
-        reorder_the_update updated
-
-let part_2 =
-    let updated =
-        page_number_updates
-        |> Array.filter(fun x -> is_update_in_correct_order x |> not)
-        |> Array.map(fun x -> reorder_the_update x)
-
-    updated
-    |> Array.map(fun arr -> arr[arr.Length / 2])
-    |> Array.sum
-
-let result_2 = part_2
-printfn $"The number of sum of part 2 is %i{result_2}"
+    let grid = Grid.parse inputs, Piece.parse
+    0
