@@ -1,86 +1,84 @@
-﻿// For more information see https://aka.ms/fsharp-console-apps
+﻿open System.IO
+let inputs = File.ReadAllLines "./input.txt"
 
-open System.IO
+let find_guard (arr: char [,]) =
+    let is_guard c = c = '^' || c = '>' || c = 'v' || c = '<'
 
-let inputs = File.ReadAllLines "./sample.txt"
+    let rec go x y =
+          if   y >= arr.GetLength 1 then None
+          elif x >= arr.GetLength 0 then go 0 (y+1)
+          elif is_guard arr[x,y]  then Some (x,y)
+          else go (x+1) y
+    go 0 0
 
-type Orientation =
-    | North
-    | South
-    | East
-    | West
-    member this.turn =
-        match this with
-        | North -> East
-        | East -> South
-        | South -> West
-        | West -> North
+let guard_take_action (guard: int * int) (grid: char [,]) =
+    let x, y = guard
 
-type Coordinate = Coordinate of (int * int)
-with
-    member this.value = let (Coordinate value) = this in value
+    let orientation = grid[x, y]
 
-    member this.x =
-        let x, y = this.value
-        x
-
-    member this.y =
-        let x, y = this.value
-        y
-
-    member this.move orientation =
-        let x, y = this.value
-
+    let next =
         match orientation with
-        | North -> Coordinate (x, y + 1)
-        | East -> Coordinate (x + 1, y)
-        | South -> Coordinate (x, y - 1)
-        | West -> Coordinate (x - 1, y)
-type Piece =
-    | Hallway of Coordinate
-    | Wall of Coordinate
-    | Guard of Coordinate * Orientation
-    static member parse legend position =
-        match legend with
-        | '.' -> Hallway position
-        | '#' -> Wall position
-        | '^' -> Guard (position , North)
-        | '>' -> Guard (position, East)
-        | 'v' -> Guard (position, South)
-        | '<' -> Guard (position, West)
-        | _ -> failwith "Unknown legend on map"
+        | '^' -> (x - 1, y)
+        | '>' -> (x, y + 1)
+        | 'v' -> (x + 1, y)
+        | '<' -> (x, y - 1)
+        | _ -> failwith "unknown"
 
-type Grid<'T> = Grid of 'T array array
-with
-    static member parse (rows: string array) (parser: char -> Coordinate -> 'T) =
-        seq {
-            for y = 0 to rows.Length - 1 do
-                let values = rows[y].ToCharArray()
-                values |> Array.mapi(fun x character -> parser character, Coordinate(x, y))
-        } |> Seq.toArray
+    let next_x, next_y = next
+    let next_char =
+        if next_x >= grid.GetLength 0 then None
+        elif next_y >= grid.GetLength 1 then None
+        elif next_x = -1 || next_y = -1 then None
+        else Some(grid[next_x, next_y])
 
-    member this.value = let (Grid value) = this in value
+    match next_char with
+    | Some(char)  when char = '.' ->
+        grid.SetValue(orientation, next_x, next_y)
+        grid.SetValue('X', x, y)
+        Some (1, grid, next)
+    | Some(char)  when char = 'X' ->
+        grid.SetValue(orientation, next_x, next_y)
+        grid.SetValue('X', x, y)
+        Some (0, grid, next)
+    | Some(char) when char ='#' ->
+        let rotation =
+            match orientation with
+            | '^' -> '>'
+            | '>' -> 'v'
+            | 'v' -> '<'
+            | '<' -> '^'
+            | _ -> failwith "unknown orientation"
 
-    member this.rows =
-        this.value[0]
+        grid.SetValue(rotation, x, y)
+        Some (0, grid, guard)
+    | _ -> None
 
-    member this.bounds =
-        let min = Coordinate(0, 0)
-        let max = Coordinate((this.value.Length - 1), (this.value[0].Length - 1))
+let move_guard (guard: int * int) (grid: char [,]) =
+    let mutable current_grid = Some grid
+    let mutable current_guard = guard
+    let mutable count = 1
 
-        (min, max)
+    while current_grid.IsSome do
+        let result = guard_take_action current_guard grid
 
-    member this.at (position: Coordinate) =
-        this.value[position.y].[position.x]
+        match result with
+        | Some(movement, grid, guard) ->
+            count <- count + movement
+            current_guard <- guard
+            current_grid <- Some grid
 
-    member this.find_first (lookup: 'T -> bool) =
-        seq {
-            for row in this.rows do
-                for column in row do
-                    if(lookup column) then yield column
-        } |> Seq.head
+            // printfn "%A" grid
+            // printfn "-------------------------------"
+        | None ->
+            current_grid <- None
 
+    count
 
 let part_1 =
-    let grid = Grid.parse inputs, Piece.parse
-    0
+    let grid = inputs |> Array.map(_.ToCharArray()) |> array2D
+    let guard = find_guard grid |> Option.defaultValue (0, 0)
+
+    let action = move_guard guard grid
+    printfn $"Result of part 1 is %i{action}"
+
+part_1
